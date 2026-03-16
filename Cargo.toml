@@ -1,0 +1,12 @@
+[package]
+name = "proj"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ciborium = "0.2.2"
+clap = { version = "4.5.60", features = ["derive"] }
+constcat = "0.6.1"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.0.6"
+xdg = "3.0.0"

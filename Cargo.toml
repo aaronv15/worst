@@ -1,9 +1,10 @@
 [package]
-name = "proj"
+name = "worst"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aho-corasick = "1.1.4"
 ciborium = "0.2.2"
 clap = { version = "4.5.60", features = ["derive"] }
 constcat = "0.6.1"

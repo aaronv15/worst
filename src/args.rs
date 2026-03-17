@@ -41,20 +41,40 @@ pub enum Command {
 
 #[derive(Args)]
 pub struct Go {
-    pub lang: Option<String>,
-    pub name: Option<String>,
+    lang_or_name: Option<String>,
+    name: Option<String>,
+
+    /// Language the project is under. If only lang is given, lang will be treated as name. If only
+    /// lang is specified as lang, then this flag should be set to signal that
+    #[arg(long, short)]
+    lang: bool,
+
+    /// Config variant to use
+    #[arg(long, short)]
+    pub var: Option<String>,
 }
 impl Go {
     // Returns (lang, name)
     pub fn get_lang_name(&self) -> (Option<&String>, Option<&String>) {
-        (
-            if self.name.is_some() {
-                self.lang.as_ref()
-            } else {
-                self.name.as_ref()
-            },
-            self.name.as_ref().or(self.lang.as_ref()),
-        )
+        match (&self.lang_or_name, &self.name, &self.lang) {
+            (Some(lang), Some(name), _) => (Some(lang), Some(name)),
+            (Some(lang), None, true) => (Some(lang), None),
+            (Some(lang), None, false) => (None, Some(lang)),
+            (None, None, _) => (None, None),
+            (None, Some(_), _) => {
+                unreachable!("clap ensures that name cannot be filled if lang is not")
+            }
+        }
+    }
+}
+impl From<New> for Go {
+    fn from(value: New) -> Self {
+        Go {
+            lang_or_name: Some(value.lang),
+            name: Some(value.name),
+            lang: false,
+            var: value.var
+        }
     }
 }
 #[derive(Args)]
@@ -65,6 +85,10 @@ pub struct New {
     /// Create in cwd instead of <LANG>
     #[arg(long, short = 'H')]
     pub here: bool,
+
+    /// Config variant to use
+    #[arg(long, short)]
+    pub var: Option<String>,
 
     /// Pass to init procedure
     #[arg(last = true)]

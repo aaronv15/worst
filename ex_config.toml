@@ -36,7 +36,6 @@ new = "cargo new %{dir}"
 open = "if [ -e src/main.rs ]; then nvim src/main.rs; else nvim src/lib.rs; fi"
 
 [python]
-name = "py"
 vars.env_name = "env"
 new = """mkdir %{dir} && python3 -m venv %{env_name}"""
 go = "cd %{dir} && source %{env_name}/bin/activate"

@@ -1,6 +1,5 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Range {:?}", 10..1);
-    // proj::run()
+fn main() {
+    worst::run();
 }
 
 // use std::{collections::HashMap, path::PathBuf};

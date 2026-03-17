@@ -1,6 +1,5 @@
 use constcat::concat as constcat;
 use std::collections::HashMap;
-use std::io::Read;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -10,30 +9,23 @@ use crate::errors as err;
 
 pub struct ConfigKey<'a> {
     language: &'a str,
-    shell: String,
-    platform: String,
+    variant: Option<&'a String>,
 }
 impl<'a> ConfigKey<'a> {
-    pub fn new(language: &'a str, shell: String, platform: String) -> Self {
-        Self {
-            language,
-            shell,
-            platform,
-        }
+    pub fn new(language: &'a str, variant: Option<&'a String>) -> Self {
+        Self { language, variant }
     }
 }
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub base_dir: Option<PathBuf>,
-    pub go_cmd: Option<String>,
-    pub new_cmd: Option<String>,
-    pub open_cmd: Option<String>,
+    base_dir: Option<PathBuf>,
+    go_cmd: Option<String>,
+    new_cmd: Option<String>,
+    open_cmd: Option<String>,
 
-    pub name: Option<String>,
-
-    pub table: HashMap<String, Config>,
-    pub user_vars: HashMap<String, toml::Value>,
+    table: HashMap<String, Config>,
+    user_vars: HashMap<String, toml::Value>,
 }
 impl Config {
     // Removes a string value from a toml::Table, or returns an error if the value does not exist or
@@ -53,10 +45,9 @@ impl Config {
     fn from_table(table: &mut toml::Table) -> err::Result<Self> {
         Ok(Self {
             base_dir: Self::get_str_value(table, "base_dir")?.map(|s| PathBuf::from(s)),
-            go_cmd: Self::get_str_value(table, "go_cmd")?,
-            new_cmd: Self::get_str_value(table, "new_cmd")?,
-            open_cmd: Self::get_str_value(table, "open_cmd")?,
-            name: Self::get_str_value(table, "name")?,
+            go_cmd: Self::get_str_value(table, "go")?,
+            new_cmd: Self::get_str_value(table, "new")?,
+            open_cmd: Self::get_str_value(table, "open")?,
             user_vars: table.remove("vars").map_or_else(
                 || Ok(HashMap::new()),
                 |v| match v {
@@ -68,7 +59,7 @@ impl Config {
                 .into_iter()
                 .map(|(k, v)| match v {
                     toml::Value::Table(v) => Ok((k.to_string(), Self::from_table(v)?)),
-                    _ => Err(err::Error::Config(format!("Unkown key {} in config", k))),
+                    _ => Err(err::Error::Config(format!("Unkown key '{}' in config", k))),
                 })
                 .collect::<Result<_, _>>()?,
         })
@@ -83,20 +74,22 @@ impl Config {
             Err(e) => Err(err::Error::ConfigParse(e)),
         }
     }
-
-    pub fn new_config_key(&self, lang: &str) -> ConfigKey {
-        // ConfigKey::new(lang, )
-    }
 }
 impl Config {
     pub const NEW_DEFAULT: &str = constcat!("mkdir ", sub::SUB_DIR);
     pub const GO_DEFAULT: &str = constcat!("cd ", sub::SUB_DIR);
     pub const OPEN_DEFAULT: &str = "nvim .";
+    pub const BASE_DIR_DEFAULT: &str = "~/Documents";
 
     pub fn get_config(&self, key: &ConfigKey) -> Option<&Config> {
-        let mut keys = vec![key.language, key.shell, key.platform];
+        let mut keys = {
+            let mut v = Vec::with_capacity(2);
+            v.push(key.language);
+            key.variant.map(|var| v.push(var));
+            v
+        };
         let mut config = {
-            let mut v = Vec::with_capacity(3);
+            let mut v = Vec::with_capacity(keys.len());
             v.push(self);
             v
         };
@@ -116,8 +109,15 @@ impl Config {
         config.pop()
     }
 
-    pub fn base_dir(&self, key: &ConfigKey) -> Option<&PathBuf> {
-        self.get_config(key).unwrap_or(self).base_dir.as_ref()
+    pub fn base_dir(&self, key: &ConfigKey) -> &PathBuf {
+        static BASE_DIR_DEF: std::sync::LazyLock<PathBuf> =
+            std::sync::LazyLock::new(|| PathBuf::from(Config::BASE_DIR_DEFAULT));
+
+        self.get_config(key)
+            .unwrap_or(self)
+            .base_dir
+            .as_ref()
+            .unwrap_or(&*BASE_DIR_DEF)
     }
 
     pub fn go_cmd(&self, key: &ConfigKey) -> &str {
@@ -144,8 +144,8 @@ impl Config {
             .map_or(Self::OPEN_DEFAULT, |s| &s)
     }
 
-    pub fn name(&self, key: &ConfigKey) -> Option<&String> {
-        self.get_config(key).and_then(|c| c.name.as_ref())
+    pub fn user_vars(&self, key: &ConfigKey) -> &HashMap<String, toml::Value> {
+        &self.get_config(key).unwrap_or(self).user_vars
     }
 }
 
@@ -153,7 +153,7 @@ impl Config {
 pub struct ProjStateObj {
     pub proj: String,
     pub language: String,
-    pub base_dir: std::ffi::OsString,
+    pub base_dir: PathBuf,
 }
 
 pub struct State {
@@ -183,7 +183,7 @@ impl State {
         ciborium::into_writer(
             &self.projects,
             std::fs::OpenOptions::new().write(true).open(&self.path)?,
-        );
+        )?;
         Ok(())
     }
 
@@ -202,7 +202,7 @@ impl State {
                 ProjStateObj {
                     proj,
                     language,
-                    base_dir: base_dir.into_os_string(),
+                    base_dir: base_dir,
                 },
             )
         }

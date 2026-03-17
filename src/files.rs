@@ -190,6 +190,7 @@ impl State {
         ciborium::into_writer(
             &self.projects,
             std::fs::OpenOptions::new()
+                .create(true)
                 .write(true)
                 .open(&self.path)
                 .map_err(|e| err::new_io("opening state file: ".into(), e))?,

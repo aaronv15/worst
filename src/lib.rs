@@ -21,70 +21,48 @@ pub(crate) mod errors {
     type SerErr = ciborium::ser::Error<std::io::Error>;
     type DeErr = ciborium::de::Error<std::io::Error>;
 
-    #[allow(dead_code)]
-    pub fn new_ser(s: String) -> Error {
-        Error::Serialize(s)
+    pub fn new_ser(s: String, e: SerErr) -> Error {
+        Error::Serialize(s, e)
     }
-    #[allow(dead_code)]
-    pub fn new_de(s: String) -> Error {
-        Error::Deserialize(s)
+    pub fn new_de(s: String, e: DeErr) -> Error {
+        Error::Deserialize(s, e)
     }
-    #[allow(dead_code)]
     pub fn new_config(s: String) -> Error {
         Error::Config(s)
     }
-    #[allow(dead_code)]
+    pub fn new_config_parse(s: String, e: toml::de::Error) -> Error {
+        Error::ConfigParse(s, e)
+    }
+    pub fn new_user_var_replace(s: String, e: aho_corasick::BuildError) -> Error {
+        Error::UserVarReplace(s, e)
+    }
     pub fn new_raw(s: String) -> Error {
         Error::Raw(s)
     }
+    pub fn new_io(s: String, e: std::io::Error) -> Error {
+        Error::Io(s, e)
+    }
 
     pub enum Error {
-        Serialize(String),
-        Deserialize(String),
+        Serialize(String, SerErr),
+        Deserialize(String, DeErr),
         Config(String),
-        ConfigParse(toml::de::Error),
-        UserVarReplace(aho_corasick::BuildError),
+        ConfigParse(String, toml::de::Error),
+        UserVarReplace(String, aho_corasick::BuildError),
         Raw(String),
-        Io(std::io::Error),
+        Io(String, std::io::Error),
     }
     impl Error {
         fn string_name(&self) -> &'static str {
             match self {
-                Self::Serialize(_) => "Serialize",
-                Self::Deserialize(_) => "Deserialize",
-                Self::Config(_) => "Config",
-                Self::ConfigParse(_) => "ConfigParse",
-                Self::UserVarReplace(_) => "UserVarReplace",
-                Self::Raw(_) => "Raw",
-                Self::Io(_) => "Io",
+                Self::Serialize(..) => "Serialize",
+                Self::Deserialize(..) => "Deserialize",
+                Self::Config(..) => "Config",
+                Self::ConfigParse(..) => "ConfigParse",
+                Self::UserVarReplace(..) => "UserVarReplace",
+                Self::Raw(..) => "Raw",
+                Self::Io(..) => "Io",
             }
-        }
-    }
-
-    impl From<DeErr> for Error {
-        fn from(e: DeErr) -> Self {
-            match e {
-                ciborium::de::Error::Io(e) => e.into(),
-                e => Self::Deserialize(e.to_string()),
-            }
-        }
-    }
-    impl From<SerErr> for Error {
-        fn from(e: SerErr) -> Self {
-            match e {
-                ciborium::ser::Error::Io(e) => e.into(),
-                ciborium::ser::Error::Value(s) => Self::Serialize(s),
-            }
-        }
-    }
-    impl From<std::io::Error> for Error {
-        fn from(e: std::io::Error) -> Self {
-            Self::Io(e)
-        }
-    }
-    impl From<aho_corasick::BuildError> for Error {
-        fn from(e: aho_corasick::BuildError) -> Self {
-            Self::UserVarReplace(e)
         }
     }
 
@@ -96,13 +74,28 @@ pub(crate) mod errors {
             }
 
             match self {
-                Self::Serialize(e) => e.fmt(f),
-                Self::Deserialize(e) => e.fmt(f),
+                Self::Serialize(s, e) => {
+                    f.write_str(s)?;
+                    e.fmt(f)
+                }
+                Self::Deserialize(s, e) => {
+                    f.write_str(s)?;
+                    e.fmt(f)
+                }
                 Self::Config(e) => e.fmt(f),
-                Self::ConfigParse(e) => e.fmt(f),
-                Self::UserVarReplace(e) => e.fmt(f),
+                Self::ConfigParse(s, e) => {
+                    f.write_str(s)?;
+                    e.fmt(f)
+                }
+                Self::UserVarReplace(s, e) => {
+                    f.write_str(s)?;
+                    e.fmt(f)
+                }
                 Self::Raw(e) => e.fmt(f),
-                Self::Io(e) => e.fmt(f),
+                Self::Io(s, e) => {
+                    f.write_str(s)?;
+                    e.fmt(f)
+                }
             }
         }
     }
@@ -146,7 +139,9 @@ fn build_command(args: BuildCmdArgs) -> errors::Result<String> {
     .chain(vars.iter().map(|(k, v)| (*k, v.as_str())))
     .collect::<(Vec<&str>, Vec<&str>)>();
 
-    let patterns = aho_corasick::AhoCorasick::new(search)?;
+    let patterns = aho_corasick::AhoCorasick::new(search).map_err(|e| {
+        errors::new_user_var_replace("building search for user provided variables: ".into(), e)
+    })?;
     let cmd_str = patterns.replace_all(args.cmd, &replace);
 
     Ok(cmd_str)

@@ -52,26 +52,32 @@ impl Config {
                 || Ok(HashMap::new()),
                 |v| match v {
                     toml::Value::Table(t) => Ok(t.into_iter().collect()),
-                    _ => Err(err::Error::Config("vars must be a table".into())),
+                    _ => Err(err::new_config(
+                        "parsing config: 'vars' must be a table".into(),
+                    )),
                 },
             )?,
             table: table
                 .into_iter()
                 .map(|(k, v)| match v {
                     toml::Value::Table(v) => Ok((k.to_string(), Self::from_table(v)?)),
-                    _ => Err(err::Error::Config(format!("Unkown key '{}' in config", k))),
+                    _ => Err(err::new_config(format!(
+                        "parsing config: Unkown key '{}' in config",
+                        k
+                    ))),
                 })
                 .collect::<Result<_, _>>()?,
         })
     }
 
     pub fn new(path: PathBuf) -> err::Result<Self> {
-        let config = std::fs::read_to_string(&path)?;
+        let config = std::fs::read_to_string(&path)
+            .map_err(|e| err::new_io("reading config: ".into(), e))?;
         let table: Result<toml::Table, _> = config.parse();
 
         match table {
             Ok(mut table) => Self::from_table(&mut table),
-            Err(e) => Err(err::Error::ConfigParse(e)),
+            Err(e) => Err(err::new_config_parse("parsing config toml: ".into(), e)),
         }
     }
 }
@@ -168,7 +174,8 @@ impl State {
     /// not exist)
     pub fn de(path: PathBuf) -> err::Result<State> {
         let projects = if let Ok(fd) = std::fs::File::open(&path) {
-            ciborium::de::from_reader(fd)?
+            ciborium::de::from_reader(fd)
+                .map_err(|e| err::new_de("deserializing state file: ".into(), e))?
         } else {
             vec![]
         };
@@ -182,8 +189,12 @@ impl State {
     pub fn ser(&self) -> err::Result<()> {
         ciborium::into_writer(
             &self.projects,
-            std::fs::OpenOptions::new().write(true).open(&self.path)?,
-        )?;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&self.path)
+                .map_err(|e| err::new_io("opening state file: ".into(), e))?,
+        )
+        .map_err(|e| err::new_ser("serializing state: ".into(), e))?;
         Ok(())
     }
 

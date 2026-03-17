@@ -73,7 +73,7 @@ impl From<New> for Go {
             lang_or_name: Some(value.lang),
             name: Some(value.name),
             lang: false,
-            var: value.var
+            var: value.var,
         }
     }
 }
@@ -124,28 +124,37 @@ impl Pargs {
         Ok(canon_path)
     }
 
-    fn resolve_config(bd: &xdg::BaseDirectories, path: Option<PathBuf>) -> io::Result<PathBuf> {
+    fn resolve_config(
+        bd: &xdg::BaseDirectories,
+        path: Option<PathBuf>,
+    ) -> crate::errors::Result<PathBuf> {
+        use crate::errors::{new_io, new_raw};
         if let Some(path) = path {
             path
         } else {
-            bd.get_config_file(CONFIG_NAME).ok_or(io::Error::new(
-                io::ErrorKind::NotFound,
-                "config file not found",
-            ))?
+            bd.get_config_file(CONFIG_NAME)
+                .ok_or_else(|| new_raw("could not work out path to config file".into()))?
         }
         // Config file must exist
         .canonicalize()
+        .map_err(|e| new_io("locating config file: ".into(), e))
     }
 
-    fn resolve_state(bd: &xdg::BaseDirectories, path: Option<PathBuf>) -> io::Result<PathBuf> {
+    fn resolve_state(
+        bd: &xdg::BaseDirectories,
+        path: Option<PathBuf>,
+    ) -> crate::errors::Result<PathBuf> {
+        use crate::errors::new_io;
         if let Some(path) = path {
             Self::get_canon_path_or_parent(path)
+                .map_err(|e| new_io("locating path to state file/directory: ".into(), e))
         } else {
             bd.place_state_file(STATE_FILE)
+                .map_err(|e| new_io("creating state file/directory: ".into(), e))
         }
     }
 
-    pub fn parse() -> io::Result<Self> {
+    pub fn parse() -> crate::errors::Result<Self> {
         let args = Cli::parse();
 
         let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME);

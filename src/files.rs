@@ -1,6 +1,7 @@
 use constcat::concat as constcat;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -17,7 +18,7 @@ impl<'a> ConfigKey<'a> {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug)]
 pub struct Config {
     base_dir: Option<PathBuf>,
     go_cmd: Option<String>,
@@ -82,10 +83,11 @@ impl Config {
     }
 }
 impl Config {
-    pub const NEW_DEFAULT: &str = constcat!("mkdir ", sub::SUB_DIR);
-    pub const GO_DEFAULT: &str = constcat!("cd ", sub::SUB_DIR);
+    pub const NEW_DEFAULT: &str = constcat!("mkdir ", sub::SUB_PATH);
+    pub const GO_DEFAULT: &str = constcat!("cd ", sub::SUB_PATH);
     pub const OPEN_DEFAULT: &str = "nvim .";
-    pub const BASE_DIR_DEFAULT: &str = "~/Documents";
+    pub const BASE_DIR_DEFAULT: LazyLock<String> =
+        LazyLock::new(|| std::env::var("HOME").unwrap() + "/Documents");
 
     pub fn get_config(&self, key: &ConfigKey) -> Option<&Config> {
         let mut keys = {
@@ -115,39 +117,35 @@ impl Config {
         config.pop()
     }
 
-    pub fn base_dir(&self, key: &ConfigKey) -> &PathBuf {
-        static BASE_DIR_DEF: std::sync::LazyLock<PathBuf> =
-            std::sync::LazyLock::new(|| PathBuf::from(Config::BASE_DIR_DEFAULT));
+    pub fn base_dir(&self, key: &ConfigKey) -> err::Result<PathBuf> {
+        use std::sync::LazyLock;
+
+        static BASE_DIR_DEF: LazyLock<PathBuf> =
+            LazyLock::new(|| PathBuf::from(&*Config::BASE_DIR_DEFAULT));
 
         self.get_config(key)
-            .unwrap_or(self)
-            .base_dir
-            .as_ref()
-            .unwrap_or(&*BASE_DIR_DEF)
+            .and_then(|c| c.base_dir.as_ref())
+            .unwrap_or_else(|| self.base_dir.as_ref().unwrap_or(&*BASE_DIR_DEF))
+            .canonicalize()
+            .map_err(|e| err::new_io("resolving path to base_dir: ".into(), e))
     }
 
     pub fn go_cmd(&self, key: &ConfigKey) -> &str {
         self.get_config(key)
-            .unwrap_or(self)
-            .go_cmd
-            .as_ref()
-            .map_or(Self::GO_DEFAULT, |s| &s)
+            .and_then(|c| c.go_cmd.as_ref().map(String::as_str))
+            .unwrap_or_else(|| self.go_cmd.as_ref().map_or(Self::GO_DEFAULT, |s| &s))
     }
 
     pub fn new_cmd(&self, key: &ConfigKey) -> &str {
         self.get_config(key)
-            .unwrap_or(self)
-            .new_cmd
-            .as_ref()
-            .map_or(Self::NEW_DEFAULT, |s| &s)
+            .and_then(|c| c.new_cmd.as_ref().map(String::as_str))
+            .unwrap_or_else(|| self.new_cmd.as_ref().map_or(Self::NEW_DEFAULT, |s| &s))
     }
 
     pub fn open_cmd(&self, key: &ConfigKey) -> &str {
         self.get_config(key)
-            .unwrap_or(self)
-            .open_cmd
-            .as_ref()
-            .map_or(Self::OPEN_DEFAULT, |s| &s)
+            .and_then(|c| c.open_cmd.as_ref().map(String::as_str))
+            .unwrap_or_else(|| self.open_cmd.as_ref().map_or(Self::OPEN_DEFAULT, |s| &s))
     }
 
     pub fn user_vars(&self, key: &ConfigKey) -> &HashMap<String, toml::Value> {

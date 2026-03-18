@@ -16,6 +16,9 @@ struct Cli {
     #[arg(long, global = true)]
     pub state_dir: Option<PathBuf>,
 
+    #[arg(long, hide = true)]
+    test: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -99,6 +102,7 @@ pub struct Pargs {
     pub config: PathBuf,
     pub state: PathBuf,
     pub command: Command,
+    pub test: bool,
 }
 impl Pargs {
     fn get_canon_path_or_parent(path: PathBuf) -> io::Result<PathBuf> {
@@ -162,6 +166,7 @@ impl Pargs {
             config: Self::resolve_config(&xdg_dirs, args.config)?,
             state: Self::resolve_state(&xdg_dirs, args.state_dir)?,
             command: args.command,
+            test: args.test,
         })
     }
 }

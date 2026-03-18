@@ -12,7 +12,8 @@ pub(crate) mod constants {
 
     pub(crate) const SUB_LANG: &str = "%{lang}";
     pub(crate) const SUB_NAME: &str = "%{name}";
-    pub(crate) const SUB_DIR: &str = "%{dir}";
+    pub(crate) const SUB_DIR: &str = "%{base_dir}";
+    pub(crate) const SUB_PATH: &str = "%{path}";
 }
 
 pub(crate) mod errors {
@@ -119,24 +120,63 @@ struct UpdateState {
     name: String,
     base_dir: PathBuf,
 }
+struct Output {
+    string: String,
+    test: bool,
+}
+
+fn value_to_string(val: &toml::Value, quote_strings: bool) -> errors::Result<String> {
+    use toml::Value as v;
+    Ok(match val {
+        v::String(s) => {
+            if quote_strings {
+                format!("\"{}\"", s)
+            } else {
+                s.to_string()
+            }
+        }
+        v::Integer(s) => s.to_string(),
+        v::Float(s) => s.to_string(),
+        v::Boolean(s) => s.to_string(),
+        v::Datetime(s) => s.to_string(),
+        v::Array(s) => {
+            let mut str = s.iter().try_fold(String::from("["), |acc, v| {
+                Ok(acc + &value_to_string(v, true)? + ",")
+            })?;
+            str.pop();
+            str + "]"
+        }
+        v::Table(_) => Err(errors::new_config(
+            "invalid 'vars': 'vars' is not allowed to be a table".into(),
+        ))?,
+    })
+}
 
 fn build_command(args: BuildCmdArgs) -> errors::Result<String> {
-    use constants::{SUB_DIR, SUB_LANG, SUB_NAME};
+    use constants::{SUB_DIR, SUB_LANG, SUB_NAME, SUB_PATH};
 
     let base_path_str = args.base_dir.to_string_lossy();
-    let vars: Vec<(&str, String)> = args
+    let full_path = {
+        let mut path = args.base_dir.join(args.lang);
+        path.push(args.name);
+        path.to_string_lossy().to_string()
+    };
+    let vars = args
         .vars
         .iter()
-        .map(|(k, v)| (k.as_str(), String::from(v.type_str())))
-        .collect();
+        .map(|(k, v)| -> Result<(String, String), errors::Error> {
+            Ok((format!("%{{{}}}", k), value_to_string(v, false)?))
+        })
+        .collect::<Result<Vec<(String, String)>, _>>()?;
 
     let (search, replace) = [
         (SUB_LANG, args.lang),
         (SUB_NAME, args.name),
         (SUB_DIR, &base_path_str),
+        (SUB_PATH, &full_path),
     ]
     .into_iter()
-    .chain(vars.iter().map(|(k, v)| (*k, v.as_str())))
+    .chain(vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
     .collect::<(Vec<&str>, Vec<&str>)>();
 
     let patterns = aho_corasick::AhoCorasick::new(search).map_err(|e| {
@@ -163,7 +203,7 @@ fn get_go_cmd_build_cmd_args<'a>(
                 name,
                 cmd: get_cfg_cmd(cfg, key),
                 vars: cfg.user_vars(key),
-                base_dir: cfg.base_dir(key),
+                base_dir: &cfg.base_dir(key)?,
             }
         }
         (Some(lang), None) => {
@@ -245,7 +285,7 @@ fn handle_new(
         name,
         cmd: cfg.new_cmd(key),
         vars: cfg.user_vars(key),
-        base_dir: cfg.base_dir(key),
+        base_dir: &cfg.base_dir(key)?,
     };
 
     Ok((
@@ -282,7 +322,7 @@ fn handle_open_new(
     ))
 }
 
-fn get_output_str() -> errors::Result<String> {
+fn get_output_str() -> errors::Result<Output> {
     let args = args::Pargs::parse()?;
     let conf = Config::new(args.config)?;
     let mut state = State::de(args.state)?;
@@ -301,13 +341,23 @@ fn get_output_str() -> errors::Result<String> {
     state.insert(update_state.name, update_state.lang, update_state.base_dir);
     state.ser()?;
 
-    Ok(result)
+    Ok(Output {
+        string: result,
+        test: args.test,
+    })
 }
 
 pub fn run() {
-    let output = match get_output_str() {
-        Ok(s) => s,
-        Err(e) => format!("{{echo '{}'}}", e.to_string().escape_default()),
+    match get_output_str() {
+        Ok(Output {
+            string,
+            test: false,
+        }) => {
+            print!("{}", format!("EXEC::{}", string));
+        }
+        Ok(Output { string, test: true }) => {
+            print!("{}", format!("EXEC::echo '{}'", string.escape_default()));
+        }
+        Err(e) => eprint!("{}", e.to_string()),
     };
-    print!("{}", output);
 }

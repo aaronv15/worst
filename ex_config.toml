@@ -30,14 +30,15 @@
 # for leaf values, only [base_dir, new, go, open] will drop their language and search in the root table for their values.
 
 base_dir = "~/Documents/"
+new = "echo \"new %{path}\""
 
 [rust]
-new = "cargo new %{dir}"
+go = "cd \"%{path}\""
 open = "if [ -e src/main.rs ]; then nvim src/main.rs; else nvim src/lib.rs; fi"
 
 [python]
 vars.env_name = "env"
-new = """mkdir %{dir} && python3 -m venv %{env_name}"""
+new = """mkdir %{path} && python3 -m venv %{env_name}"""
 go = "cd %{dir} && source %{env_name}/bin/activate"
 
 [ps1.python]

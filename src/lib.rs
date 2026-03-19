@@ -6,14 +6,23 @@ mod args;
 mod files;
 
 pub(crate) mod constants {
+    use constcat::concat as constcat;
+    use std::sync::LazyLock;
+
     pub(crate) const APP_NAME: &str = "worst-switcher";
     pub(crate) const CONFIG_NAME: &str = "config.toml";
-    pub(crate) const STATE_FILE: &str = "state";
+    pub(crate) const STATE_FILE: &str = "state.cbor";
 
     pub(crate) const SUB_LANG: &str = "%{lang}";
     pub(crate) const SUB_NAME: &str = "%{name}";
     pub(crate) const SUB_DIR: &str = "%{base_dir}";
     pub(crate) const SUB_PATH: &str = "%{path}";
+
+    pub(crate) const NEW_DEFAULT: &str = constcat!("mkdir ", SUB_PATH);
+    pub(crate) const GO_DEFAULT: &str = constcat!("cd ", SUB_PATH);
+    pub(crate) const OPEN_DEFAULT: &str = "nvim .";
+    pub(crate) const BASE_DIR_DEFAULT: LazyLock<String> =
+        LazyLock::new(|| std::env::var("HOME").unwrap() + "/Documents");
 }
 
 pub(crate) mod errors {
@@ -203,7 +212,7 @@ fn get_go_cmd_build_cmd_args<'a>(
                 name,
                 cmd: get_cfg_cmd(cfg, key),
                 vars: cfg.user_vars(key),
-                base_dir: &cfg.base_dir(key)?,
+                base_dir: cfg.base_dir(key),
             }
         }
         (Some(lang), None) => {
@@ -285,7 +294,7 @@ fn handle_new(
         name,
         cmd: cfg.new_cmd(key),
         vars: cfg.user_vars(key),
-        base_dir: &cfg.base_dir(key)?,
+        base_dir: cfg.base_dir(key),
     };
 
     Ok((

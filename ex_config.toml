@@ -29,7 +29,7 @@
 # if that key is still not found, go back to previous location and start searching with the next key.
 # for leaf values, only [base_dir, new, go, open] will drop their language and search in the root table for their values.
 
-base_dir = "~/Documents/"
+base_dir = "$HOME/Documents/"
 new = "echo \"new %{path}\""
 
 [rust]

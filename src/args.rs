@@ -170,3 +170,32 @@ impl Pargs {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_state_valid_path() {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME);
+        Pargs::resolve_state(&xdg_dirs, Some(PathBuf::from("/home"))).unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn resolve_state_invalid_path() {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME);
+        Pargs::resolve_state(&xdg_dirs, Some(PathBuf::from("/940h/df98"))).unwrap();
+    }
+
+    #[test]
+    fn resolve_config_valid_path() {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME);
+        Pargs::resolve_config(&xdg_dirs, Some(PathBuf::from("/dev/null"))).unwrap();
+    }
+    #[test]
+    #[should_panic]
+    fn resolve_config_invalid_path() {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME);
+        Pargs::resolve_config(&xdg_dirs, Some(PathBuf::from("/940h/df98"))).unwrap();
+    }
+}

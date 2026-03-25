@@ -1,6 +1,9 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, io::Write, path::PathBuf};
 
-use crate::files::{Config, ConfigKey, State};
+use crate::{
+    args::Pargs,
+    files::{Config, ConfigKey, State},
+};
 
 mod args;
 mod files;
@@ -395,20 +398,101 @@ fn handle_open_new(
     ))
 }
 
+/// Handles setup
+fn handle_setup(setup: crate::args::Setup) -> crate::errors::Result<crate::errors::Error> {
+    use crate::errors::{new_io, new_raw};
+
+    if setup.place_config {
+        let xdg_dirs = Pargs::new_xdg_with_prefix();
+        let config_file = Pargs::xdg_config_path(&xdg_dirs)?;
+
+        // If this fails, we'll know later when tryin to create the file, and we don't care if it
+        // fails if the directory already exists
+        _ = std::fs::create_dir(
+            config_file
+                .parent()
+                .ok_or(new_raw("Config path does not have a parent?".into()))?,
+        );
+
+        match std::fs::File::create_new(&config_file) {
+            Err(e) => {
+                if matches!(e.kind(), std::io::ErrorKind::AlreadyExists) {
+                    Err(new_io(
+                        "Not creating config as it already exists: ".into(),
+                        e,
+                    ))?
+                } else {
+                    Err(new_io("creating config file: ".into(), e))?
+                }
+            }
+            Ok(mut file) => {
+                write!(file, "").map_err(|e| new_io("writing config contents: ".into(), e))?;
+                println!("Created config file {config_file:?}");
+            }
+        }
+    }
+
+    let current_executable =
+        std::env::current_exe().map_err(|e| new_io("getting path to self: ".into(), e))?;
+    let executable_path = setup
+        .with_executable
+        .unwrap_or(current_executable.to_string_lossy().into());
+
+    let shell_script_path = match &setup.generate_shell_script {
+        Some(Some(path)) => path,
+        _ => &current_executable
+            .parent()
+            .ok_or(new_raw("Why is this root?".into()))?
+            .join("worst.bash"),
+    };
+
+    let shell_script = format!(
+        r###"bin_path="{executable_path}"
+result=$("$bin_path" $*)
+if [ -n "$result" ] && [ -z "${{result##EXEC::*}}" ]; then
+   eval "${{result#EXEC::}}"
+else
+   echo "$result" 
+fi"###
+    );
+
+    if setup.generate_shell_script.is_some() {
+        let mut fs = std::fs::File::create_new(shell_script_path)
+            .map_err(|e| new_io("creating shell script: ".into(), e))?;
+        write!(fs, "{shell_script}").map_err(|e| new_io("writing shell script: ".into(), e))?;
+        println!("Created script at {shell_script_path:?}");
+    }
+
+    if setup.print_shell_script {
+        println!("{shell_script}");
+    }
+
+    Ok(new_raw("Setup complete".into()))
+}
+
 /// Builds output string based on subcommand specified
 fn get_output_str() -> errors::Result<Output> {
-    let args = args::Pargs::parse()?;
+    use crate::args::Command;
+
+    let cli = Pargs::parse();
+    if let Command::Setup(setup) = cli.command {
+        return Err(handle_setup(setup)?);
+    }
+
+    let args = Pargs::new(cli)?;
+
     let conf = Config::new(args.config)?;
     let mut state = State::de(args.state)?;
 
     let (update_state, result) = {
-        use args::Command::*;
+        use Command::*;
         match args.command {
             Go(cmd) => handle_go(&conf, &mut state, cmd),
             Open(cmd) => handle_open(&conf, &mut state, cmd),
             New(cmd) => handle_new(&conf, &mut state, &cmd),
             GoNew(cmd) => handle_go_new(&conf, &mut state, cmd),
             OpenNew(cmd) => handle_open_new(&conf, &mut state, cmd),
+            Setup(_) => unreachable!("handled above"),
         }
     }?;
 
@@ -435,6 +519,6 @@ pub fn run() {
         Ok(Output { string, test: true }) => {
             print!("{}", format!("EXEC::echo '{}'", string.escape_default()));
         }
-        Err(e) => eprint!("{}", e.to_string()),
+        Err(e) => eprintln!("{}", e.to_string()),
     };
 }

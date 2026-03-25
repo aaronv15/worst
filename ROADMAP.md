@@ -4,12 +4,13 @@
 
 - [x] Improve errors // Fea=N1
 - [x] Write shell file program runner // Fea=N2
-- [ ] Add argument to generate runner shell file // Fea=N11
+- [x] Add argument to generate runner shell file // Fea=N11
 - [ ] Rename state to data and use XDG_DATA_HOME not XDG_STATE_HOME // Fea=N12
 - [ ] Add ability to pass user variables via the command line // Fea=N13
 - [ ] Add 'run' subcommand to run a project with 'worst run' // Fea=N14
 - [ ] Add 'list' subcommand to list all available projects (Filterable) // Fea=N15
-- [ ] Add argument to generate default config file // Fea=N16
+- [x] Add argument to generate default config file // Fea=N16
+- [ ] Add default text to default config // Fea=N17
 
 ## Bugs:
 

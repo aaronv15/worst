@@ -3,13 +3,14 @@ name = "worst"
 version = "1.0.0"
 edition = "2024"
 exclude = ["ROADMAP.md"]
+license = "MIT"
 
 [lib]
 name = "worst"
 
 [[bin]]
 path = "src/main.rs"
-name = "worst-bin"
+name = "worst-switcher"
 
 [profile.dev]
 debug = "line-tables-only"

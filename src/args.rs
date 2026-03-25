@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(version, about, propagate_version = true)]
-struct Cli {
+pub struct Cli {
     /// Path to configuration file. If not provided will follow the XDG base directory
     /// specification.
     #[arg(long, global = true)]
@@ -20,7 +20,7 @@ struct Cli {
     test: bool,
 
     #[command(subcommand)]
-    command: Command,
+    pub command: Command,
 }
 
 #[derive(Subcommand)]
@@ -40,6 +40,55 @@ pub enum Command {
     /// Create a new project, go to it, and open
     #[command(alias = "on")]
     OpenNew(New),
+
+    /// Setup options (Generate runner and config)
+    Setup(Setup),
+}
+
+/// Use in subcommands with command(flatten) to hide the display of globals in help messages
+#[derive(Args)]
+struct HideGlobals {
+    #[arg(long, global = true, hide = true)]
+    config: (),
+
+    #[arg(long, global = true, hide = true)]
+    state_dir: (),
+}
+impl HideGlobals {
+    fn empty() -> Self {
+        Self {
+            config: (),
+            state_dir: (),
+        }
+    }
+}
+
+#[derive(Args)]
+pub struct Setup {
+    /// Generate the runner shell script and place it at PATH, or in the same directory as this
+    /// executable if not specified
+    #[arg(
+        long = "generate-script",
+        num_args = 0..=1,
+        name = "PATH",
+    )]
+    pub generate_shell_script: Option<Option<PathBuf>>,
+
+    /// Generate the runner shell script with the sepcified path to the executable
+    #[arg(long)]
+    pub with_executable: Option<String>,
+
+    /// Print the runner shell script
+    #[arg(long = "print-script")]
+    pub print_shell_script: bool,
+
+    /// Create a default config file
+    #[arg(long)]
+    pub place_config: bool,
+
+    // Hide globals in help message. see: https://github.com/clap-rs/clap/issues/5355
+    #[command(flatten)]
+    hidden: HideGlobals,
 }
 
 #[derive(Args)]
@@ -55,7 +104,12 @@ pub struct Go {
     /// Config variant to use
     #[arg(long, short)]
     pub var: Option<String>,
+
+    // Hide globals in help message. see: https://github.com/clap-rs/clap/issues/5355
+    #[command(flatten)]
+    hidden: HideGlobals,
 }
+
 impl Go {
     // Returns (lang, name)
     pub fn get_lang_name(&self) -> (Option<&String>, Option<&String>) {
@@ -77,6 +131,7 @@ impl From<New> for Go {
             name: Some(value.name),
             lang: false,
             var: value.var,
+            hidden: HideGlobals::empty(),
         }
     }
 }
@@ -96,6 +151,10 @@ pub struct New {
     /// Pass to init procedure
     #[arg(last = true)]
     pub passthrough: Vec<String>,
+
+    // Hide globals in help message. see: https://github.com/clap-rs/clap/issues/5355
+    #[command(flatten)]
+    hidden: HideGlobals,
 }
 
 pub struct Pargs {
@@ -128,20 +187,34 @@ impl Pargs {
         Ok(canon_path)
     }
 
+    pub fn xdg_config_path(bd: &xdg::BaseDirectories) -> crate::errors::Result<PathBuf> {
+        use crate::errors::new_raw;
+
+        Ok(bd
+            .get_config_file(CONFIG_NAME)
+            .ok_or_else(|| new_raw("could not work out path to config file".into()))?)
+    }
+
+    pub fn new_xdg_with_prefix() -> xdg::BaseDirectories {
+        xdg::BaseDirectories::with_prefix(APP_NAME)
+    }
+
     fn resolve_config(
         bd: &xdg::BaseDirectories,
         path: Option<PathBuf>,
     ) -> crate::errors::Result<PathBuf> {
-        use crate::errors::{new_io, new_raw};
+        use crate::errors::new_io;
+
+        static ERR_MSG: &str = "locating config file (a config file can be generated with '{prog} setup --place-config'): ";
+
         if let Some(path) = path {
             path
         } else {
-            bd.get_config_file(CONFIG_NAME)
-                .ok_or_else(|| new_raw("could not work out path to config file".into()))?
+            Pargs::xdg_config_path(bd)?
         }
         // Config file must exist
         .canonicalize()
-        .map_err(|e| new_io("locating config file: ".into(), e))
+        .map_err(|e| new_io(ERR_MSG.into(), e))
     }
 
     fn resolve_state(
@@ -158,10 +231,12 @@ impl Pargs {
         }
     }
 
-    pub fn parse() -> crate::errors::Result<Self> {
-        let args = Cli::parse();
+    pub fn parse() -> Cli {
+        Cli::parse()
+    }
 
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(APP_NAME);
+    pub fn new(args: Cli) -> crate::errors::Result<Self> {
+        let xdg_dirs = Pargs::new_xdg_with_prefix();
         Ok(Self {
             config: Self::resolve_config(&xdg_dirs, args.config)?,
             state: Self::resolve_state(&xdg_dirs, args.state_dir)?,

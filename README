@@ -12,7 +12,7 @@ It might not be a bad idea to give root ownership of the config file and allow r
 
 ## Setup
 
-There is a script called worst.bash that is responsible for running the program. It has a variable named 'bin_path' which should be set to the path to the program binary. This shell script is what should be run
+There is a script called worst.bash that is responsible for running the program. It has a variable named 'bin_path' which should be set to the path to the program binary. This shell script is what should be run. It needs to be sourced to be capable of changing directory in the current shell (as a subshell has no way to modify a parent's shell's environment), so an alias should be set up
 
 It is also expected that there will be a file named 'config.toml' in a directory named 'worst-switcher' in $XDG_CONFIG_HOME
 The path to the config file can be specified in the command line arguments.
@@ -61,10 +61,11 @@ go = 'cd "%{path}"; source "%{env}/bin/activate"'
 
 ## Usage:
 
-There are currently five subcommands. The details and usage of each subcommand can be found by passing the help command to each subcommand, but the overview is:
+There are currently six subcommands. The details and usage of each subcommand can be found by passing the help command to each subcommand, but the overview is:
 
 - new - Creates a new project in a language
 - go - Switches to a specified project directory
 - open - Opens the project in (default) nvim
 - go-new - Combines the new and go commands
 - open-new - Combines the new and open commands
+- setup - Generate config file and runner file

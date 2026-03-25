@@ -1,7 +1,4 @@
-cargo build
-name="worst"
-profile="debug"
-bin_path="./target/$profile/$name"
+bin_path="./target/worst/debug"
 result=$("$bin_path" $*)
 if [ -n "$result" ] && [ -z "${result##EXEC::*}" ]; then
    eval "${result#EXEC::}"

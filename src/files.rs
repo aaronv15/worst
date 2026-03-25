@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::constants as sub;
+use crate::constants::{BASE_DIR_DEFAULT, GO_DEFAULT, NEW_DEFAULT, OPEN_DEFAULT};
 use crate::errors as err;
 
 /// Used to get a specific `Config` from the config file
@@ -170,7 +170,7 @@ impl Config {
         use std::sync::LazyLock;
 
         static BASE_DIR_DEF: LazyLock<PathBuf> =
-            LazyLock::new(|| PathBuf::from(&*sub::BASE_DIR_DEFAULT));
+            LazyLock::new(|| PathBuf::from(&*BASE_DIR_DEFAULT));
 
         self.get_config(key)
             .and_then(|c| c.base_dir.as_ref())
@@ -194,7 +194,7 @@ impl Config {
             .and_then(|c| c.go_cmd.as_ref())
             .or(self.go_cmd.as_ref())
             .map(|s| s.as_str())
-            .unwrap_or(sub::GO_DEFAULT)
+            .unwrap_or(GO_DEFAULT)
     }
 
     /// Return new_cmd from config or default
@@ -210,7 +210,7 @@ impl Config {
             .and_then(|c| c.new_cmd.as_ref())
             .or(self.new_cmd.as_ref())
             .map(|s| s.as_str())
-            .unwrap_or(sub::NEW_DEFAULT)
+            .unwrap_or(NEW_DEFAULT)
         // .and_then(|c| c.new_cmd.as_ref().map(String::as_str))
         // .unwrap_or_else(|| self.new_cmd.as_ref().map_or(sub::NEW_DEFAULT, |s| &s))
     }
@@ -228,7 +228,7 @@ impl Config {
             .and_then(|c| c.open_cmd.as_ref())
             .or(self.open_cmd.as_ref())
             .map(|s| s.as_str())
-            .unwrap_or(sub::OPEN_DEFAULT)
+            .unwrap_or(OPEN_DEFAULT)
     }
 
     pub fn user_vars(&self, key: &ConfigKey) -> &HashMap<String, toml::Value> {
@@ -329,6 +329,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::STATE_FILE;
 
     fn config_from_valid_table() -> Config {
         let mut table: toml::Table = r#"
@@ -393,8 +394,8 @@ mod tests {
 
         let key = ConfigKey::new("nonexistent", None);
 
-        assert_eq!(cfg.go_cmd(&key), sub::GO_DEFAULT);
-        assert_eq!(cfg.open_cmd(&key), sub::OPEN_DEFAULT);
+        assert_eq!(cfg.go_cmd(&key), GO_DEFAULT);
+        assert_eq!(cfg.open_cmd(&key), OPEN_DEFAULT);
     }
 
     #[test]
@@ -516,7 +517,7 @@ mod tests {
     #[test]
     fn state_roundtrip_ser_de() {
         let tmp = tempfile::tempdir().expect("creating temp dir");
-        let state_file = tmp.path().join(sub::STATE_FILE);
+        let state_file = tmp.path().join(STATE_FILE);
 
         let mut state = State {
             path: state_file,
